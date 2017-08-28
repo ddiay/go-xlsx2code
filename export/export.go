@@ -11,12 +11,13 @@ const (
 )
 
 type FieldInfo struct {
-	Name  string
-	Type  string
-	Desc  string
-	Key   string
-	Value string
-	Index bool
+	Name              string
+	Type              string
+	Desc              string
+	Key               string
+	Value             string
+	RefClassFieldName string
+	Index             bool
 }
 
 type Field struct {
@@ -34,14 +35,23 @@ type Table struct {
 	Rows       []Row
 }
 
-type Database struct {
-	Tables []Table
-}
-
 type Exporter interface {
 	Save(path string, table *Table) error
 }
 
-func (d *Database) FindIndexType(tableName string, fieldName string) string {
+var indexTypeMap map[string]string
 
+func AddIndexType(key string, typeStr string) {
+	if indexTypeMap == nil {
+		indexTypeMap = make(map[string]string)
+	}
+	indexTypeMap[key] = typeStr
+}
+
+func FindIndexType(str string) string {
+	v, ok := indexTypeMap[str]
+	if ok {
+		return v
+	}
+	return ""
 }

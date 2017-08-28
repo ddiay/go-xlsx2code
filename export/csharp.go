@@ -18,10 +18,14 @@ func (c *CSharpExporter) makeFieldStr(fi *FieldInfo) string {
 		str += fmt.Sprintf("\t\tpublic double %s;\n", fi.Name)
 	case "string":
 		str += fmt.Sprintf("\t\tpublic string %s;\n", fi.Name)
+	case "bool":
+		str += fmt.Sprintf("\t\tpublic bool %s;\n", fi.Name)
 	case "list":
 		str += fmt.Sprintf("\t\tpublic List<%s> %s = new List<%s>();\n", fi.Value, fi.Name, fi.Value)
 	case "map":
 		str += fmt.Sprintf("\t\tpublic Dictionary<%s, %s> %s = new Dictionary<%s, %s>();\n", fi.Key, fi.Value, fi.Name, fi.Key, fi.Value)
+	default:
+		str += fmt.Sprintf("\t\tpublic %s %s;\n", fi.Type, fi.Name)
 	}
 	return str
 }
@@ -64,6 +68,8 @@ func (c *CSharpExporter) makeLoadMethodStr(t *Table) string {
 			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetString(%d)\n", fi.Name, i)
 		case "float":
 			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetDouble(%d)\n", fi.Name, i)
+		case "bool":
+			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetBool(%d)\n", fi.Name, i)
 		}
 	}
 
@@ -102,18 +108,18 @@ func (c *CSharpExporter) makeLoadMethodStr(t *Table) string {
 		}
 	}
 */
-func (c *CSharpExporter) getCSharpTypeStr(string typestr) []string {
+func (c *CSharpExporter) getCSharpTypeStr(typestr string) []string {
 	switch typestr {
-		case "number":
-			return []string { "int", "Int" }
-		case "string":
-			return []string { "string", "String" }
+	case "number":
+		return []string{"int", "Int"}
+	case "string":
+		return []string{"string", "String"}
 	}
-	return []string { typestr, typestr }
+	return []string{typestr, typestr}
 }
 
-func (c *CSharpExporter) makeMapMethodStr(t *Table) string {
-	str := "\t\tpublic static void Map(IDataTable dt)\n"
+func (c *CSharpExporter) makePostLoadMethodStr(t *Table) string {
+	str := "\t\tpublic static void PostLoad(IDataTable dt)\n"
 	str += "\t\t{\n"
 
 	str += "\t\t\tstring tbname = dt.GetName();\n"
@@ -122,47 +128,63 @@ func (c *CSharpExporter) makeMapMethodStr(t *Table) string {
 	str += "\t\t\t{\n"
 
 	str += fmt.Sprintf("\t\t\t\t%s o = Rows[i];\n", t.Name)
-	
+
 	for i, fi := range t.FieldInfos {
+		if len(fi.RefClassFieldName) == 0 {
+			continue
+		}
+
 		switch fi.Type {
 		case "list":
-			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetInt(%d)\n", fi.Name, i)
+			typeStr := FindIndexType(fi.Value + "." + fi.RefClassFieldName)
+			kStrs := c.getCSharpTypeStr(typeStr)
+			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%sList();\n", fi.Value, kStrs[1])
+			str += fmt.Sprintf("\t\t\t\tforeach (var kv in __%sMap)\n", fi.Value)
+			str += "\t\t\t\t{\n"
+			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(kv.Key, %s.%sMap[kv.Value]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
+			str += "\t\t\t\t}\n"
+
 		case "map":
 			kStrs := c.getCSharpTypeStr(fi.Key)
-			vStrs := c.getCSharpTypeStr(fi.Value)
-			str += fmt.Sprintf("\t\t\t\tDictionary<%s, %s> __%sMap = dt.Get%s%sDict();\n", kStrs[0], vStrs[0], fi.Value, kStrs[1], vStrs[1])
-			str += fmt.Sprintf("\t\t\t\tforeach (KeyValuePair<%s, %s> kv in __%sMap)\n", kStrs[0], vStrs[0], fi.Value)
-			str += "\t\t\t{\n"
-			str += fmt.Sprintf("\t\t\t%s __temp = Skin.IdMap[kv.Value];\n", fi.)
-			str += "\t\t\t\to.SkinMap.Add(kv.Key, __temp);
-			}
+			typeStr := FindIndexType(fi.Value + "." + fi.RefClassFieldName)
+			vStrs := c.getCSharpTypeStr(typeStr)
+			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%s%sDict();\n", fi.Value, kStrs[1], vStrs[1])
+			str += fmt.Sprintf("\t\t\t\tforeach (var kv in __%sMap)\n", fi.Value)
+			str += "\t\t\t\t{\n"
+			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(kv.Key, %s.%sMap[kv.Value]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
+			str += "\t\t\t\t}\n"
+
 		default:
-			
+			typeStr := FindIndexType(fi.Type + "." + fi.RefClassFieldName)
+			if len(typeStr) > 0 {
+				csTypeStrs := c.getCSharpTypeStr(typeStr)
+				str += fmt.Sprintf("\t\t\t\tvar __%s = dt.Get%s(%d);\n", fi.Name, csTypeStrs[1], i)
+				str += fmt.Sprintf("\t\t\t\to.%s = %s.%sMap[__%s];\n", fi.Name, fi.Type, fi.RefClassFieldName, fi.Name)
+			}
 		}
 	}
-	
 
 	str += "\t\t\t}\n"
 	str += "\t\t}\n"
-		{
-			int CClassId = dt.GetInt(i, 2);
-			unit.CClass = CharacterClass.IdMap[CClassId];
+	// 	{
+	// 		int CClassId = dt.GetInt(i, 2);
+	// 		unit.CClass = CharacterClass.IdMap[CClassId];
 
-			Dictionary<string, int> SkinMapFields = dt.GetStringIntDict();
-			foreach (KeyValuePair<string, int> kv in SkinMapFields)
-			{
-				Skin skin = Skin.IdMap[kv.Value];
-				unit.SkinMap.Add(kv.Key, skin);
-			}
-		}
-	}
+	// 		Dictionary<string, int> SkinMapFields = dt.GetStringIntDict();
+	// 		foreach (KeyValuePair<string, int> kv in SkinMapFields)
+	// 		{
+	// 			Skin skin = Skin.IdMap[kv.Value];
+	// 			unit.SkinMap.Add(kv.Key, skin);
+	// 		}
+	// 	}
+	// }
 
 	return str + "\n"
 }
 
 func (c *CSharpExporter) makeMethodsStr(t *Table) string {
 	str := c.makeLoadMethodStr(t)
-	str += c.makeMapMethodStr(t)
+	str += c.makePostLoadMethodStr(t)
 	return str + "\n"
 }
 

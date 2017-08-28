@@ -15,6 +15,15 @@ var xlsxPath = flag.String("f", "", "Path to an XLSX file")
 var outputPath = flag.String("t", "", "Path to output")
 var delimiter = flag.String("d", "\t", "Delimiter to use between fields")
 
+func splitRefClassStr(str string) []string {
+	strs := strings.Split(str, ".")
+	if len(strs) == 1 {
+		strs = append(strs, "")
+	}
+
+	return strs
+}
+
 func generateCSVFromXLSXFile(excelFileName string, exporters []export.Exporter) error {
 	xlFile, error := xlsx.OpenFile(excelFileName)
 	if error != nil {
@@ -45,24 +54,32 @@ func generateCSVFromXLSXFile(excelFileName string, exporters []export.Exporter) 
 						table.FieldInfos = append(table.FieldInfos, fieldInfo)
 					} else if i == 1 {
 						ft := cell.String()
-						table.FieldInfos[j].Type = ft
 						if strings.HasPrefix(ft, "#") {
 							str := strings.TrimLeft(ft, "#")
 							table.FieldInfos[j].Type = str
 							table.FieldInfos[j].Index = true
-						} else if strings.HasPrefix(ft, "<") && strings.HasSuffix(ft, ">") {
-							str := strings.TrimPrefix(ft, "<")
-							str = strings.TrimSuffix(ft, ">")
-							blocks := strings.Split(str, ",")
+							export.AddIndexType(table.Name+"."+table.FieldInfos[j].Name, table.FieldInfos[j].Type)
+						} else if strings.HasPrefix(ft, "[") && strings.HasSuffix(ft, "]") {
+							str := strings.TrimPrefix(ft, "[")
+							str = strings.TrimSuffix(str, "]")
+							blocks := strings.Split(str, ":")
 							switch len(blocks) {
 							case 1:
 								table.FieldInfos[j].Type = "list"
-								table.FieldInfos[j].Value = blocks[0]
+								temp := splitRefClassStr(blocks[0])
+								table.FieldInfos[j].Value = temp[0]
+								table.FieldInfos[j].RefClassFieldName = temp[1]
 							case 2:
 								table.FieldInfos[j].Type = "map"
 								table.FieldInfos[j].Key = blocks[0]
-								table.FieldInfos[j].Key = blocks[1]
+								temp := splitRefClassStr(blocks[1])
+								table.FieldInfos[j].Value = temp[0]
+								table.FieldInfos[j].RefClassFieldName = temp[1]
 							}
+						} else {
+							temp := splitRefClassStr(ft)
+							table.FieldInfos[j].Type = temp[0]
+							table.FieldInfos[j].RefClassFieldName = temp[1]
 						}
 					} else if i == 2 {
 						table.FieldInfos[j].Desc = cell.String()
@@ -86,12 +103,13 @@ func generateCSVFromXLSXFile(excelFileName string, exporters []export.Exporter) 
 		// 	return err
 		// }
 		tables = append(tables, table)
-		for _, exporter := range exporters {
-			exporter.Save(*outputPath, &table)
-		}
-		break
 	}
-	fmt.Println(tables)
+
+	for _, t := range tables {
+		for _, exporter := range exporters {
+			exporter.Save(*outputPath, &t)
+		}
+	}
 	return nil
 }
 
