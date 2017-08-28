@@ -52,7 +52,7 @@ func (c *CSharpExporter) makeFieldsStr(t *Table) string {
 }
 
 func (c *CSharpExporter) makeLoadMethodStr(t *Table) string {
-	str := "\t\tpublic static void Load(IDatatable dt)\n"
+	str := "\t\tpublic static void PreLoad(IDatatable dt)\n"
 	str += "\t\t{\n"
 	str += "\t\t\tstring tbname = dt.GetName();\n"
 	str += "\t\t\tint numRows = dt.GetRowCount();\n"
@@ -63,13 +63,13 @@ func (c *CSharpExporter) makeLoadMethodStr(t *Table) string {
 	for i, fi := range t.FieldInfos {
 		switch fi.Type {
 		case "number":
-			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetInt(%d)\n", fi.Name, i)
+			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetInt(i, %d);\n", fi.Name, i)
 		case "string":
-			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetString(%d)\n", fi.Name, i)
+			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetString(i, %d);\n", fi.Name, i)
 		case "float":
-			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetDouble(%d)\n", fi.Name, i)
+			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetDouble(i, %d);\n", fi.Name, i)
 		case "bool":
-			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetBool(%d)\n", fi.Name, i)
+			str += fmt.Sprintf("\t\t\t\to.%s = dt.GetBool(i, %d);\n", fi.Name, i)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (c *CSharpExporter) getCSharpTypeStr(typestr string) []string {
 }
 
 func (c *CSharpExporter) makePostLoadMethodStr(t *Table) string {
-	str := "\t\tpublic static void PostLoad(IDataTable dt)\n"
+	str := "\t\tpublic static void PostLoad(IDatatable dt)\n"
 	str += "\t\t{\n"
 
 	str += "\t\t\tstring tbname = dt.GetName();\n"
@@ -137,18 +137,18 @@ func (c *CSharpExporter) makePostLoadMethodStr(t *Table) string {
 		switch fi.Type {
 		case "list":
 			typeStr := FindIndexType(fi.Value + "." + fi.RefClassFieldName)
-			kStrs := c.getCSharpTypeStr(typeStr)
-			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%sList();\n", fi.Value, kStrs[1])
+			keyStrs := c.getCSharpTypeStr(typeStr)
+			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%sList(i, %d);\n", fi.Value, keyStrs[1], i)
 			str += fmt.Sprintf("\t\t\t\tforeach (var kv in __%sMap)\n", fi.Value)
 			str += "\t\t\t\t{\n"
 			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(kv.Key, %s.%sMap[kv.Value]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
 			str += "\t\t\t\t}\n"
 
 		case "map":
-			kStrs := c.getCSharpTypeStr(fi.Key)
+			keyStrs := c.getCSharpTypeStr(fi.Key)
 			typeStr := FindIndexType(fi.Value + "." + fi.RefClassFieldName)
-			vStrs := c.getCSharpTypeStr(typeStr)
-			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%s%sDict();\n", fi.Value, kStrs[1], vStrs[1])
+			valStrs := c.getCSharpTypeStr(typeStr)
+			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%s%sDict(i, %d);\n", fi.Value, keyStrs[1], valStrs[1], i)
 			str += fmt.Sprintf("\t\t\t\tforeach (var kv in __%sMap)\n", fi.Value)
 			str += "\t\t\t\t{\n"
 			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(kv.Key, %s.%sMap[kv.Value]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
@@ -158,7 +158,7 @@ func (c *CSharpExporter) makePostLoadMethodStr(t *Table) string {
 			typeStr := FindIndexType(fi.Type + "." + fi.RefClassFieldName)
 			if len(typeStr) > 0 {
 				csTypeStrs := c.getCSharpTypeStr(typeStr)
-				str += fmt.Sprintf("\t\t\t\tvar __%s = dt.Get%s(%d);\n", fi.Name, csTypeStrs[1], i)
+				str += fmt.Sprintf("\t\t\t\tvar __%s = dt.Get%s(i, %d);\n", fi.Name, csTypeStrs[1], i)
 				str += fmt.Sprintf("\t\t\t\to.%s = %s.%sMap[__%s];\n", fi.Name, fi.Type, fi.RefClassFieldName, fi.Name)
 			}
 		}
@@ -194,7 +194,7 @@ func (c *CSharpExporter) makeClassStr(fieldsStr, methodsStr string, t *Table) st
 	str += "\n"
 	str += "namespace Datatable\n"
 	str += "{\n"
-	str += "\tpublic Class " + t.Name + "\n"
+	str += "\tpublic class " + t.Name + "\n"
 	str += "\t{\n"
 	str += fieldsStr + "\n"
 	str += methodsStr + "\n"
@@ -203,12 +203,40 @@ func (c *CSharpExporter) makeClassStr(fieldsStr, methodsStr string, t *Table) st
 	return str
 }
 
-func (c *CSharpExporter) Save(path string, table *Table) error {
-	fieldsStr := c.makeFieldsStr(table)
-	methodsStr := c.makeMethodsStr(table)
-	str := c.makeClassStr(fieldsStr, methodsStr, table)
+func (c *CSharpExporter) makeTableLoaderStr(preLoadStr string, postLoadStr string) string {
+	str := "using System;\n"
+	str += "using System.Collections.Generic;\n"
+	str += "\n"
+	str += "namespace Datatable\n"
+	str += "{\n"
+	str += "\tpublic class TableLoader\n"
+	str += "\t{\n"
 
-	fullpath := filepath.Join(path, table.Name+".cs")
-	ioutil.WriteFile(fullpath, []byte(str), 0666)
+	str += "\t}\n"
+	str += "}\n"
+	return str
+}
+
+func (c *CSharpExporter) Save(path string, tables []Table) error {
+	// preLoadStr := ""
+	// postLoadStr := ""
+	str := ""
+	fullpath := ""
+	for _, t := range tables {
+		fieldsStr := c.makeFieldsStr(&t)
+		methodsStr := c.makeMethodsStr(&t)
+		str = c.makeClassStr(fieldsStr, methodsStr, &t)
+
+		fullpath = filepath.Join(path, t.Name+".cs")
+		ioutil.WriteFile(fullpath, []byte(str), 0666)
+
+		// preLoadStr += c.makePreLoadStr(t.Name)
+		// postLoadStr += c.makePostLoadStr(t.Name)
+	}
+
+	// str = c.makeTableLoaderStr(preLoadStr, postLoadStr)
+	// path = filepath.Join(path, "TableLoader.cs")
+	// ioutil.WriteFile(path, []byte(str), 0666)
+
 	return nil
 }

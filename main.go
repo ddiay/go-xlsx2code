@@ -105,10 +105,8 @@ func generateCSVFromXLSXFile(excelFileName string, exporters []export.Exporter) 
 		tables = append(tables, table)
 	}
 
-	for _, t := range tables {
-		for _, exporter := range exporters {
-			exporter.Save(*outputPath, &t)
-		}
+	for _, exporter := range exporters {
+		exporter.Save(*outputPath, tables)
 	}
 	return nil
 }

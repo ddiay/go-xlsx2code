@@ -36,7 +36,7 @@ type Table struct {
 }
 
 type Exporter interface {
-	Save(path string, table *Table) error
+	Save(path string, table []Table) error
 }
 
 var indexTypeMap map[string]string
