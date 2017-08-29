@@ -121,7 +121,9 @@ func main() {
 	var exporters []export.Exporter
 
 	csExporter := &export.CSharpExporter{}
+	csvExporter := &export.CsvExporter{}
 	exporters = append(exporters, csExporter)
+	exporters = append(exporters, csvExporter)
 	if err := generateCSVFromXLSXFile(*xlsxPath, exporters); err != nil {
 		fmt.Println(err)
 	}

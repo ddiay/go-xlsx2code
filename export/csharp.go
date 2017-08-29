@@ -3,6 +3,7 @@ package export
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 )
 
@@ -222,12 +223,14 @@ func (c *CSharpExporter) Save(path string, tables []Table) error {
 	// postLoadStr := ""
 	str := ""
 	fullpath := ""
+	cspath := filepath.Join(path, "cs")
+	os.MkdirAll(cspath, 0777)
 	for _, t := range tables {
 		fieldsStr := c.makeFieldsStr(&t)
 		methodsStr := c.makeMethodsStr(&t)
 		str = c.makeClassStr(fieldsStr, methodsStr, &t)
 
-		fullpath = filepath.Join(path, t.Name+".cs")
+		fullpath = filepath.Join(cspath, t.Name+".cs")
 		ioutil.WriteFile(fullpath, []byte(str), 0666)
 
 		// preLoadStr += c.makePreLoadStr(t.Name)
