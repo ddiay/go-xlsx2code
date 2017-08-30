@@ -13,6 +13,8 @@ import (
 
 var xlsxPath = flag.String("f", "", "Path to an XLSX file")
 var outputPath = flag.String("t", "", "Path to output")
+var classPrefix = flag.String("p", "", "Prefix for class")
+var classSuffix = flag.String("s", "", "Suffix for class")
 var delimiter = flag.String("d", "\t", "Delimiter to use between fields")
 
 func splitRefClassStr(str string) []string {
@@ -39,7 +41,7 @@ func generateCSVFromXLSXFile(excelFileName string, exporters []export.Exporter) 
 	for _, sheet := range xlFile.Sheets {
 		// csvContent := ""
 		table := export.Table{
-			Name: sheet.Name,
+			Name: *classPrefix + sheet.Name + *classSuffix,
 		}
 
 		for i, row := range sheet.Rows {
