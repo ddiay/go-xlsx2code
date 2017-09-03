@@ -139,10 +139,10 @@ func (c *CSharpExporter) makePostLoadMethodStr(t *Table) string {
 		case "list":
 			typeStr := FindIndexType(fi.Value + "." + fi.RefClassFieldName)
 			keyStrs := c.getCSharpTypeStr(typeStr)
-			str += fmt.Sprintf("\t\t\t\tvar __%sMap = dt.Get%sList(i, %d);\n", fi.Value, keyStrs[1], i)
-			str += fmt.Sprintf("\t\t\t\tforeach (var kv in __%sMap)\n", fi.Value)
+			str += fmt.Sprintf("\t\t\t\tvar __%sList = dt.Get%sList(i, %d);\n", fi.Value, keyStrs[1], i)
+			str += fmt.Sprintf("\t\t\t\tforeach (var v in __%sList)\n", fi.Value)
 			str += "\t\t\t\t{\n"
-			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(kv.Key, %s.%sMap[kv.Value]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
+			str += fmt.Sprintf("\t\t\t\t\to.%s.Add(%s.%sMap[v]);\n", fi.Name, fi.Value, fi.RefClassFieldName)
 			str += "\t\t\t\t}\n"
 
 		case "map":
