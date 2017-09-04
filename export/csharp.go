@@ -204,15 +204,42 @@ func (c *CSharpExporter) makeClassStr(fieldsStr, methodsStr string, t *Table) st
 	return str
 }
 
-func (c *CSharpExporter) makeTableLoaderStr(preLoadStr string, postLoadStr string) string {
+func (c *CSharpExporter) makeLoadfileStr(t *Table) string {
+	return "\t\t\t\t\"Datatable/Csv/" + t.Name + ".csv\",\n"
+}
+
+func (c *CSharpExporter) makeDatatableStr(t *Table) string {
+	return "\t\t\tCsvDatatable __" + t.Name + "Table = new CsvDatatable(resMgr.GetCsv(\"Datatable/Csv/" + t.Name + ".csv\"));\n"
+}
+
+func (c *CSharpExporter) makePreloadStr(t *Table) string {
+	return "\t\t\t" + t.Name + ".PreLoad(__" + t.Name + "Table);\n"
+}
+
+func (c *CSharpExporter) makePostloadStr(t *Table) string {
+	return "\t\t\t" + t.Name + ".PostLoad(__" + t.Name + "Table);\n"
+}
+
+func (c *CSharpExporter) makeTableLoaderStr(loadfileStr, datatableStr, preloadStr, postloadStr string) string {
 	str := "using System;\n"
 	str += "using System.Collections.Generic;\n"
+	str += "using GameUtil;\n"
 	str += "\n"
-	str += "namespace Datatable\n"
-	str += "{\n"
-	str += "\tpublic class TableLoader\n"
+	str += "namespace Datatable {\n"
+	str += "\tpublic class CsvDatatableLoader\n"
 	str += "\t{\n"
 
+	str += "\t\tpublic static void LoadResources(ResourceManager resMgr, Action<int> doneAction) {\n"
+	str += "\t\t\tresMgr.Load(new string[] {\n"
+	str += loadfileStr
+	str += "\t\t\t}, doneAction);\n"
+	str += "\t\t}\n"
+
+	str += "\t\tpublic static void ResourceToDatatable(ResourceManager resMgr) {\n"
+	str += datatableStr + "\n"
+	str += preloadStr + "\n"
+	str += postloadStr
+	str += "\t\t}\n"
 	str += "\t}\n"
 	str += "}\n"
 	return str
@@ -224,6 +251,11 @@ func (c *CSharpExporter) Save(path string, tables []Table) error {
 	str := ""
 	fullpath := ""
 	cspath := filepath.Join(path, "cs")
+	loadfileStr := ""
+	datatableStr := ""
+	preloadStr := ""
+	postloadStr := ""
+
 	os.MkdirAll(cspath, 0777)
 	for _, t := range tables {
 		fieldsStr := c.makeFieldsStr(&t)
@@ -233,13 +265,15 @@ func (c *CSharpExporter) Save(path string, tables []Table) error {
 		fullpath = filepath.Join(cspath, t.Name+".cs")
 		ioutil.WriteFile(fullpath, []byte(str), 0666)
 
-		// preLoadStr += c.makePreLoadStr(t.Name)
-		// postLoadStr += c.makePostLoadStr(t.Name)
+		loadfileStr += c.makeLoadfileStr(&t)
+		datatableStr += c.makeDatatableStr(&t)
+		preloadStr += c.makePreloadStr(&t)
+		postloadStr += c.makePostloadStr(&t)
 	}
 
-	// str = c.makeTableLoaderStr(preLoadStr, postLoadStr)
-	// path = filepath.Join(path, "TableLoader.cs")
-	// ioutil.WriteFile(path, []byte(str), 0666)
+	str = c.makeTableLoaderStr(loadfileStr, datatableStr, preloadStr, postloadStr)
+	fullpath = filepath.Join(cspath, "CsvDatatableLoader.cs")
+	ioutil.WriteFile(fullpath, []byte(str), 0666)
 
 	return nil
 }
